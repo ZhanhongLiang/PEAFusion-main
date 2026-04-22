@@ -1,0 +1,40 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Training outputs / checkpoints
+checkpoints/
+checkpoints_debug/
+lightning_logs/
+*.ckpt
+*.pth
+*.pt
+*.pth.tar
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Detectron2 / extension build outputs
+models/mask2former/pixel_decoder/ops/build/
+models/mask2former/pixel_decoder/ops/*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store

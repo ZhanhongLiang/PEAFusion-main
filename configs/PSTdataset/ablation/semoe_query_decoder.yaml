@@ -1,0 +1,12 @@
+_BASE_: ../swin_v2/swin_v2_tiny.yaml
+
+MODEL:
+  FUSION:
+    USE_SEMOE_FUSION: True
+    FUSION_TYPE: "semoe"
+    ROUTER_TYPE: "class_aware"
+  MASK_FORMER:
+    DECODER_TYPE: "semantic_query"
+    RECURSIVE_REROUTING: False
+    MAX_RECURSIVE_LAYERS: 2
+

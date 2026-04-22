@@ -1,0 +1,11 @@
+_BASE_: ../swin_v2/swin_v2_tiny.yaml
+
+MODEL:
+  FUSION:
+    USE_SEMOE_FUSION: False
+    FUSION_TYPE: "peafusion"
+    ROUTER_TYPE: "visual"
+  MASK_FORMER:
+    DECODER_TYPE: "baseline"
+    RECURSIVE_REROUTING: False
+
