@@ -10,11 +10,32 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 DATASET_DIR="${DATASET_DIR:-/home/wislab/lzh/datasets/PST900_RGBT_Dataset}"
 
 # Official SwinV2 Tiny pretrained checkpoint.
-PRETRAINED_PATH="${PRETRAINED_PATH:-/home/wislab/lzh/PEAFusion-main/pretrained_model/swinv2_tiny_patch4_window16_256.pth}"
+BACKBONE_SIZE="${BACKBONE_SIZE:-tiny}"
+case "$BACKBONE_SIZE" in
+  tiny)
+    DEFAULT_CONFIG_BASE="$PROJECT_ROOT/configs/PSTdataset/swin_v2/swin_v2_tiny.yaml"
+    DEFAULT_PRETRAINED_PATH="$PROJECT_ROOT/pretrained_model/swinv2_tiny_patch4_window16_256.pth"
+    ;;
+  small)
+    DEFAULT_CONFIG_BASE="$PROJECT_ROOT/configs/PSTdataset/swin_v2/swin_v2_small.yaml"
+    DEFAULT_PRETRAINED_PATH="$PROJECT_ROOT/pretrained_model/swinv2_small_patch4_window16_256.pth"
+    ;;
+  base)
+    DEFAULT_CONFIG_BASE="$PROJECT_ROOT/configs/PSTdataset/swin_v2/swin_v2_base.yaml"
+    DEFAULT_PRETRAINED_PATH="$PROJECT_ROOT/pretrained_model/swinv2_base_patch4_window12_192_22k.pth"
+    ;;
+  *)
+    echo "Unsupported BACKBONE_SIZE: $BACKBONE_SIZE"
+    echo "Expected one of: tiny, small, base"
+    exit 1
+    ;;
+esac
 
-CONFIG_BASE="${CONFIG_BASE:-$PROJECT_ROOT/configs/PSTdataset/ablation/semoe_class_router.yaml}"
+PRETRAINED_PATH="${PRETRAINED_PATH:-$DEFAULT_PRETRAINED_PATH}"
+CONFIG_BASE="${CONFIG_BASE:-$DEFAULT_CONFIG_BASE}"
 NUM_GPUS="${NUM_GPUS:-1}"
 IMS_PER_BATCH="${IMS_PER_BATCH:-2}" # for debug 的batch_size设置为2
+EXPERT_DEPTH="${EXPERT_DEPTH:-1}"
 SEED="${SEED:-1024}"
 WORK_DIR="${WORK_DIR:-$PROJECT_ROOT/checkpoints_debug}"
 EXP_NAME="${EXP_NAME:-semoe_class_router_pst_debug}"
@@ -73,6 +94,7 @@ MODEL:
     FUSION_TYPE: "semoe"
     ROUTER_TYPE: "class_aware"
     SEMOE_CHANNEL_WISE: True
+    EXPERT_DEPTH: $EXPERT_DEPTH
   MASK_FORMER:
     DECODER_TYPE: "baseline"
     RECURSIVE_REROUTING: False
@@ -85,6 +107,7 @@ EOF
 echo "Project root: $PROJECT_ROOT"
 echo "Python: $PYTHON_BIN"
 echo "Dataset: $DATASET_DIR"
+echo "Backbone size: $BACKBONE_SIZE"
 echo "Pretrained: $PRETRAINED_PATH"
 echo "Config: $TMP_CONFIG"
 echo "Experiment: $EXP_NAME"
@@ -92,6 +115,8 @@ echo "Work dir: $WORK_DIR"
 echo
 echo "Core switches:"
 echo "  ims_per_batch=$IMS_PER_BATCH"
+echo "  backbone_size=$BACKBONE_SIZE"
+echo "  expert_depth=$EXPERT_DEPTH"
 echo "  use_semoe_fusion=True"
 echo "  fusion_type=semoe"
 echo "  router_type=class_aware"

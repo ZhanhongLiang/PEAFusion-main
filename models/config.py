@@ -31,6 +31,7 @@ def add_peafusion_config(cfg):
     cfg.MODEL.FUSION.ROUTER_TYPE = "visual"
     cfg.MODEL.FUSION.SEMOE_CHANNEL_WISE = True
     cfg.MODEL.FUSION.CLASS_EMBED_DIM = 256
+    cfg.MODEL.FUSION.EXPERT_DEPTH = 1
 
     cfg.DATASETS.NAME = "MFdataset"
     cfg.DATASETS.DIR = "./datasets/MFdataset/"

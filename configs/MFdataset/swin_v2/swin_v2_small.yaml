@@ -1,27 +1,32 @@
 _BASE_: ../Base-MFdataset-SemanticSegmentation.yaml
 
 DATASETS:
-  IMS_PER_BATCH: &b 14
+  IMS_PER_BATCH: &b 8
 
 MODEL:
   SWIN:
-    PRETRAINED: './pretrained_model/swinv2_tiny/swinv2_tiny_patch4_window16_256.pth'
+    PRETRAINED: './pretrained_model/swinv2_small/swinv2_small_patch4_window16_256.pth'
     FROZEN_STAGE: 4
     EMBED_DIM: 96
-    DEPTHS: [2, 2, 6, 2]
+    DEPTHS: [2, 2, 18, 2]
     NUM_HEADS: [3, 6, 12, 24]
     WINDOW_SIZE: 16
     PRETRAINED_WINDOW_SIZE: [16,16,16,16]
     APE: False
-    DROP_PATH_RATE: 0.2
+    DROP_PATH_RATE: 0.3
     PATCH_NORM: True
     USE_CHECKPOINT_LIST: [False,False,False,False]
     OUT_FEATURES:  ["res2", "res3", "res4", "res5"]
+    ADD_MODEL_ADAPTER: True
+    MODEL_ADAPTER_SCALE: 4.0
+    MODEL_MHA_RATIO: 0.125
+    MODEL_FFN_RATIO: 0.5
     MODEL_OUTPUT_ATTN: False
-    # MODEL_OUTPUT_ATTN: True
 
 SOLVER:
-  IMS_PER_BATCH: *b  
+  IMS_PER_BATCH: *b
+  BASE_LR: 0.0001
+  MAX_ITER: 35000
   BACKBONE_MULTIPLIER: 4.0
   CLIP_GRADIENTS:
     ENABLED: True

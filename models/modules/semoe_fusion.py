@@ -14,6 +14,13 @@ import torch
 import torch.nn as nn
 
 
+def _validate_expert_depth(depth: int) -> int:
+    depth = int(depth)
+    if depth < 1:
+        raise ValueError(f"expert_depth must be >= 1, got {depth}.")
+    return depth
+
+
 class _ResidualExpertCore(nn.Module):
     """Lightweight residual expert used by the modality-specific experts."""
 
@@ -40,12 +47,25 @@ class _ResidualExpertCore(nn.Module):
         return x + residual
 
 
+class _ResidualExpertStack(nn.Module):
+    """Stacks multiple lightweight residual expert cores."""
+
+    def __init__(self, channels: int, depth: int) -> None:
+        super().__init__()
+        depth = _validate_expert_depth(depth)
+        self.blocks = nn.Sequential(*[_ResidualExpertCore(channels) for _ in range(depth)])
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.blocks(x)
+
+
 class RGBExpert(nn.Module):
     """Enhances RGB features while preserving the input shape."""
 
-    def __init__(self, channels: int) -> None:
+    def __init__(self, channels: int, depth: int = 1) -> None:
         super().__init__()
-        self.core = _ResidualExpertCore(channels)
+        self.depth = _validate_expert_depth(depth)
+        self.core = _ResidualExpertStack(channels, self.depth)
 
     def forward(self, rgb_feat: torch.Tensor) -> torch.Tensor:
         return self.core(rgb_feat)
@@ -54,9 +74,10 @@ class RGBExpert(nn.Module):
 class ThermalExpert(nn.Module):
     """Enhances thermal features with parameters independent from RGBExpert."""
 
-    def __init__(self, channels: int) -> None:
+    def __init__(self, channels: int, depth: int = 1) -> None:
         super().__init__()
-        self.core = _ResidualExpertCore(channels)
+        self.depth = _validate_expert_depth(depth)
+        self.core = _ResidualExpertStack(channels, self.depth)
 
     def forward(self, thermal_feat: torch.Tensor) -> torch.Tensor:
         return self.core(thermal_feat)
@@ -65,8 +86,9 @@ class ThermalExpert(nn.Module):
 class SharedExpert(nn.Module):
     """Builds a shared cross-modal feature from RGB and thermal inputs."""
 
-    def __init__(self, channels: int) -> None:
+    def __init__(self, channels: int, depth: int = 1) -> None:
         super().__init__()
+        self.depth = _validate_expert_depth(depth)
         fused_channels = channels * 2
         self.reduce = nn.Conv2d(fused_channels, channels, kernel_size=1, bias=True)
         self.act = nn.GELU()
@@ -79,6 +101,11 @@ class SharedExpert(nn.Module):
             bias=True,
         )
         self.proj = nn.Conv2d(channels, channels, kernel_size=1, bias=True)
+        self.refine = (
+            nn.Identity()
+            if self.depth == 1
+            else _ResidualExpertStack(channels, self.depth - 1)
+        )
 
     def forward(self, rgb_feat: torch.Tensor, thermal_feat: torch.Tensor) -> torch.Tensor:
         x = torch.cat([rgb_feat, thermal_feat], dim=1)
@@ -86,6 +113,7 @@ class SharedExpert(nn.Module):
         x = self.act(x)
         x = self.depthwise(x)
         x = self.proj(x)
+        x = self.refine(x)
         return x
 
 
@@ -145,15 +173,17 @@ class SeMoEFusionBlock(nn.Module):
         channels: int,
         channel_wise_router: bool = True,
         return_router_weights: bool = False,
+        expert_depth: int = 1,
     ) -> None:
         super().__init__()
         self.channels = channels
+        self.expert_depth = _validate_expert_depth(expert_depth)
         self.return_router_weights = return_router_weights
         self.latest_router_weights = {}
 
-        self.rgb_expert = RGBExpert(channels)
-        self.thermal_expert = ThermalExpert(channels)
-        self.shared_expert = SharedExpert(channels)
+        self.rgb_expert = RGBExpert(channels, depth=self.expert_depth)
+        self.thermal_expert = ThermalExpert(channels, depth=self.expert_depth)
+        self.shared_expert = SharedExpert(channels, depth=self.expert_depth)
         self.router = SemanticExpertRouter(
             channels=channels,
             channel_wise=channel_wise_router,
@@ -336,16 +366,18 @@ class ClassAwareSeMoEFusionBlock(nn.Module):
         embed_dim: int,
         channel_wise: bool = False,
         efficient_mode: bool = False,
+        expert_depth: int = 1,
     ) -> None:
         super().__init__()
         self.num_classes = num_classes
         self.in_channels = in_channels
         self.channel_wise = channel_wise
         self.efficient_mode = efficient_mode
+        self.expert_depth = _validate_expert_depth(expert_depth)
 
-        self.rgb_expert = RGBExpert(in_channels) # RGB专家
-        self.thermal_expert = ThermalExpert(in_channels) # 红外专家
-        self.shared_expert = SharedExpert(in_channels) # 共享专家
+        self.rgb_expert = RGBExpert(in_channels, depth=self.expert_depth) # RGB专家
+        self.thermal_expert = ThermalExpert(in_channels, depth=self.expert_depth) # 红外专家
+        self.shared_expert = SharedExpert(in_channels, depth=self.expert_depth) # 共享专家
         self.router = ClassAwareSemanticRouter(
             num_classes=num_classes,
             in_channels=in_channels,

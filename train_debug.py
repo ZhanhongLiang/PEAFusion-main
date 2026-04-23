@@ -85,6 +85,7 @@ class EpochMetricsFileLogger(Callback):
             f.write(f"decoder_type: {self.cfg.MODEL.MASK_FORMER.DECODER_TYPE}\n")
             f.write(f"recursive_rerouting: {self.cfg.MODEL.MASK_FORMER.RECURSIVE_REROUTING}\n")
             f.write(f"class_embed_dim: {self.cfg.MODEL.FUSION.CLASS_EMBED_DIM}\n")
+            f.write(f"expert_depth: {self.cfg.MODEL.FUSION.EXPERT_DEPTH}\n")
             f.write(f"loss_balance_weight: {self.cfg.MODEL.MASK_FORMER.LOSS_BALANCE_WEIGHT}\n")
             f.write(f"num_classes: {self.cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES}\n")
             f.write("\n=== Model Stats ===\n")
@@ -251,6 +252,7 @@ def main():
         f"type={cfg.MODEL.FUSION.FUSION_TYPE}, "
         f"router={cfg.MODEL.FUSION.ROUTER_TYPE}, "
         f"class_embed_dim={cfg.MODEL.FUSION.CLASS_EMBED_DIM}, "
+        f"expert_depth={cfg.MODEL.FUSION.EXPERT_DEPTH}, "
         f"decoder={cfg.MODEL.MASK_FORMER.DECODER_TYPE}, "
         f"recursive={cfg.MODEL.MASK_FORMER.RECURSIVE_REROUTING}"
     )

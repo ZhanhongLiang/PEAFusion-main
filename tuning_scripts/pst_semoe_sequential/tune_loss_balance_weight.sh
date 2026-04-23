@@ -15,6 +15,7 @@ NUM_GPUS="${NUM_GPUS:-1}"
 IMS_PER_BATCH="${IMS_PER_BATCH:-8}"
 CHECK_VAL_EVERY_N_EPOCH="${CHECK_VAL_EVERY_N_EPOCH:-1}"
 CLASS_EMBED_DIM="${CLASS_EMBED_DIM:-256}"
+EXPERT_DEPTH="${EXPERT_DEPTH:-1}"
 EPOCHS="${EPOCHS:-250}"
 # Fine sweep around the current best region.
 # Override with: VALUES="0.0 0.0005 0.001 0.002 0.003" bash ...
@@ -80,6 +81,7 @@ MODEL:
     ROUTER_TYPE: "class_aware"
     SEMOE_CHANNEL_WISE: True
     CLASS_EMBED_DIM: $CLASS_EMBED_DIM
+    EXPERT_DEPTH: $EXPERT_DEPTH
   MASK_FORMER:
     DECODER_TYPE: "baseline"
     RECURSIVE_REROUTING: False
@@ -94,6 +96,7 @@ EOF
   echo "exp_name: $EXP_NAME" | tee -a "$SUMMARY_FILE"
   echo "LOSS_BALANCE_WEIGHT: $VALUE" | tee -a "$SUMMARY_FILE"
   echo "CLASS_EMBED_DIM: $CLASS_EMBED_DIM" | tee -a "$SUMMARY_FILE"
+  echo "EXPERT_DEPTH: $EXPERT_DEPTH" | tee -a "$SUMMARY_FILE"
   echo "config: $TMP_CONFIG" | tee -a "$SUMMARY_FILE"
 
   "$PYTHON_BIN" "$PROJECT_ROOT/train.py" \

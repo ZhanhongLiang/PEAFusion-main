@@ -80,6 +80,7 @@ class SemanticQueryDecoder(nn.Module):
         recursive_rerouting: bool,
         max_recursive_layers: int,
         recursive_channel_wise: bool,
+        recursive_expert_depth: int,
     ):
         super().__init__()
         self.mask_classification = mask_classification
@@ -88,6 +89,7 @@ class SemanticQueryDecoder(nn.Module):
         self.recursive_rerouting = recursive_rerouting
         self.max_recursive_layers = max(0, min(max_recursive_layers, num_layers))
         self.recursive_channel_wise = recursive_channel_wise
+        self.recursive_expert_depth = recursive_expert_depth
 
         if isinstance(in_channels_list, int):
             in_channels_list = [in_channels_list]
@@ -107,9 +109,9 @@ class SemanticQueryDecoder(nn.Module):
         self.latest_aux_outputs = []
 
         # Recursive expert-aware decoding is optional and disabled by default.
-        self.recursive_rgb_expert = RGBExpert(decoder_dim)
-        self.recursive_thermal_expert = ThermalExpert(decoder_dim)
-        self.recursive_shared_expert = SharedExpert(decoder_dim)
+        self.recursive_rgb_expert = RGBExpert(decoder_dim, depth=self.recursive_expert_depth)
+        self.recursive_thermal_expert = ThermalExpert(decoder_dim, depth=self.recursive_expert_depth)
+        self.recursive_shared_expert = SharedExpert(decoder_dim, depth=self.recursive_expert_depth)
         self.recursive_router = ClassAwareSemanticRouter(
             num_classes=num_classes,
             in_channels=decoder_dim,
@@ -135,6 +137,7 @@ class SemanticQueryDecoder(nn.Module):
             "recursive_rerouting": cfg.MODEL.MASK_FORMER.RECURSIVE_REROUTING,
             "max_recursive_layers": cfg.MODEL.MASK_FORMER.MAX_RECURSIVE_LAYERS,
             "recursive_channel_wise": cfg.MODEL.MASK_FORMER.RECURSIVE_CHANNEL_WISE,
+            "recursive_expert_depth": cfg.MODEL.FUSION.EXPERT_DEPTH,
         }
 
     def _normalize_inputs(self, features):
@@ -251,6 +254,7 @@ if __name__ == "__main__":
         recursive_rerouting=False,
         max_recursive_layers=2,
         recursive_channel_wise=False,
+        recursive_expert_depth=1,
     )
     multi_scale_features = [
         torch.randn(2, 128, 64, 64),
@@ -277,6 +281,7 @@ if __name__ == "__main__":
         recursive_rerouting=True,
         max_recursive_layers=2,
         recursive_channel_wise=True,
+        recursive_expert_depth=1,
     )
     out_recursive = recursive_decoder(multi_scale_features)
     print("multi_scale recursive on logits:", tuple(out_recursive["sem_seg_logits"].shape))

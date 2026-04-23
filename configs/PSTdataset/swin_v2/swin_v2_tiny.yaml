@@ -20,11 +20,6 @@ MODEL:
     OUT_FEATURES:  ["res2", "res3", "res4", "res5"]
     MODEL_OUTPUT_ATTN: False
     # MODEL_OUTPUT_ATTN: True
-  SEM_SEG_HEAD:
-    PIXEL_DECODER_NAME: "MSDeformAttnPixelDecoder"
-    TRANSFORMER_ENC_LAYERS: 6
-  MASK_FORMER:
-    DEC_LAYERS: 4  
 
 SOLVER:
   IMS_PER_BATCH: *b   

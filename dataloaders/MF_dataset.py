@@ -22,11 +22,29 @@ class MF_dataset(Dataset):
         assert split in ['train', 'val', 'test', 'test_day', 'test_night', 'val_test'], \
             'split must be "train"|"val"|"test"|"test_day"|"test_night"|"val_test"' 
 
-        with open(os.path.join(data_dir, split+'.txt'), 'r') as f:
-            self.names = [name.strip() for name in f.readlines()]
+        requested_split = split
+        raw_split_dir = os.path.join(data_dir, split)
+        if split == 'val' and not os.path.isdir(raw_split_dir) and os.path.isdir(os.path.join(data_dir, 'test')):
+            raw_split_dir = os.path.join(data_dir, 'test')
 
-        self.data_dir  = data_dir
-        self.split     = split
+        self.use_raw_split_dirs = all(
+            os.path.isdir(os.path.join(raw_split_dir, folder))
+            for folder in ['rgb', 'thermal', 'labels']
+        )
+
+        if self.use_raw_split_dirs:
+            self.data_dir = raw_split_dir
+            self.names = sorted(
+                name for name in os.listdir(os.path.join(self.data_dir, 'rgb'))
+                if os.path.isfile(os.path.join(self.data_dir, 'rgb', name))
+                and os.path.splitext(name)[1].lower() in ['.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff']
+            )
+        else:
+            with open(os.path.join(data_dir, split + '.txt'), 'r') as f:
+                self.names = [name.strip() for name in f.readlines()]
+            self.data_dir = data_dir
+
+        self.split     = requested_split
         self.n_data    = len(self.names)
         self.size_divisibility = -1
         self.ignore_label = cfg.MODEL.SEM_SEG_HEAD.IGNORE_VALUE
@@ -52,16 +70,27 @@ class MF_dataset(Dataset):
         self.augmentations.append(T.RandomFlip())
 
 
-    def read_image(self, name, folder):  
-        file_path = os.path.join(self.data_dir, '%s/%s.png' % (folder, name))
+    def read_image(self, name, folder):
+        if self.use_raw_split_dirs:
+            file_path = os.path.join(self.data_dir, folder, name)
+        else:
+            file_path = os.path.join(self.data_dir, '%s/%s.png' % (folder, name))
         image     = imread(file_path).astype('float32')
         return image
 
     def __getitem__(self, index):
         name  = self.names[index]
-        image = self.read_image(name, 'images').astype('float32')
+        if self.use_raw_split_dirs:
+            image_rgb = self.read_image(name, 'rgb')
+            thermal = self.read_image(name, 'thermal')
+            if thermal.ndim == 3:
+                thermal = thermal[:, :, -1]
+            image = np.concatenate((image_rgb, np.expand_dims(thermal, axis=2)), axis=2).astype('float32')
+            sem_seg_gt = self.read_image(name, 'labels').astype("double")
+        else:
+            image = self.read_image(name, 'images').astype('float32')
+            sem_seg_gt = self.read_image(name, 'labels').astype("double")
 
-        sem_seg_gt = self.read_image(name, 'labels').astype("double")
 
         # Data Augmentation
         if self.split == 'train':

@@ -856,6 +856,7 @@ class Fusion_Swin_Transformer(nn.Module):
         self.router_type = kwargs.get("router_type", "visual")
         self.semoe_channel_wise = kwargs.get("semoe_channel_wise", True)
         self.class_embed_dim = kwargs.get("class_embed_dim", 256)
+        self.expert_depth = kwargs.get("expert_depth", 1)
         self.num_classes = kwargs.get("num_classes", 0)
         if self.router_type == "class_aware":
             self.semoe_fusion_blocks = nn.ModuleList(
@@ -866,6 +867,7 @@ class Fusion_Swin_Transformer(nn.Module):
                         embed_dim=self.class_embed_dim,
                         channel_wise=self.semoe_channel_wise,
                         efficient_mode=True,
+                        expert_depth=self.expert_depth,
                     )
                     for dimension in self.num_features
                 ]
@@ -877,6 +879,7 @@ class Fusion_Swin_Transformer(nn.Module):
                         channels=dimension,
                         channel_wise_router=self.semoe_channel_wise,
                         return_router_weights=False,
+                        expert_depth=self.expert_depth,
                     )
                     for dimension in self.num_features
                 ]
@@ -886,7 +889,8 @@ class Fusion_Swin_Transformer(nn.Module):
             f"[PEAFusion] fusion_type={self.fusion_type}, "
             f"use_semoe_fusion={self.use_semoe_fusion}, "
             f"router_type={self.router_type}, "
-            f"class_embed_dim={self.class_embed_dim}"
+            f"class_embed_dim={self.class_embed_dim}, "
+            f"expert_depth={self.expert_depth}"
         )
 
         self.init_weights()
@@ -1082,6 +1086,7 @@ class RGBTSwinTransformer(Fusion_Swin_Transformer, Backbone):
         router_type = cfg.MODEL.FUSION.ROUTER_TYPE
         semoe_channel_wise = cfg.MODEL.FUSION.SEMOE_CHANNEL_WISE
         class_embed_dim = cfg.MODEL.FUSION.CLASS_EMBED_DIM
+        expert_depth = cfg.MODEL.FUSION.EXPERT_DEPTH
         num_classes = cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES
         
 
@@ -1115,6 +1120,7 @@ class RGBTSwinTransformer(Fusion_Swin_Transformer, Backbone):
             router_type=router_type,
             semoe_channel_wise=semoe_channel_wise,
             class_embed_dim=class_embed_dim,
+            expert_depth=expert_depth,
             num_classes=num_classes,
         )
 
