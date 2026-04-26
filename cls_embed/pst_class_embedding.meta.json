@@ -1,0 +1,105 @@
+{
+  "dataset": "pst",
+  "shape": [
+    5,
+    768
+  ],
+  "dtype": "torch.float32",
+  "normalized": true,
+  "model": "LanguageBind_Thermal",
+  "checkpoint_dir": "/home/wislab/lzh/LanguageBind-main/pretrained_model/LanguageBind_Thermal",
+  "device_used": "cpu",
+  "created_at": "2026-04-24T11:23:34",
+  "classes": [
+    {
+      "class_id": 0,
+      "label": "unlabeled",
+      "aliases": [
+        "background",
+        "unlabeled region",
+        "background region"
+      ],
+      "prompts": [
+        "background",
+        "background region",
+        "unlabeled region",
+        "a thermal-visible scene background",
+        "an infrared scene background"
+      ]
+    },
+    {
+      "class_id": 1,
+      "label": "fire_extinhuisher",
+      "aliases": [
+        "fire extinguisher"
+      ],
+      "prompts": [
+        "fire extinguisher",
+        "a thermal image of fire extinguisher",
+        "an infrared image of fire extinguisher",
+        "a thermal-visible image of fire extinguisher",
+        "a multispectral image of fire extinguisher"
+      ]
+    },
+    {
+      "class_id": 2,
+      "label": "backpack",
+      "aliases": [
+        "backpack"
+      ],
+      "prompts": [
+        "backpack",
+        "a thermal image of backpack",
+        "an infrared image of backpack",
+        "a thermal-visible image of backpack",
+        "a multispectral image of backpack"
+      ]
+    },
+    {
+      "class_id": 3,
+      "label": "hand_drill",
+      "aliases": [
+        "hand drill",
+        "power drill"
+      ],
+      "prompts": [
+        "hand drill",
+        "a thermal image of hand drill",
+        "an infrared image of hand drill",
+        "a thermal-visible image of hand drill",
+        "a multispectral image of hand drill",
+        "power drill",
+        "a thermal image of power drill",
+        "an infrared image of power drill",
+        "a thermal-visible image of power drill",
+        "a multispectral image of power drill"
+      ]
+    },
+    {
+      "class_id": 4,
+      "label": "rescue_randy",
+      "aliases": [
+        "survivor",
+        "rescue dummy",
+        "rescue randy mannequin"
+      ],
+      "prompts": [
+        "survivor",
+        "a thermal image of survivor",
+        "an infrared image of survivor",
+        "a thermal-visible image of survivor",
+        "a multispectral image of survivor",
+        "rescue dummy",
+        "a thermal image of rescue dummy",
+        "an infrared image of rescue dummy",
+        "a thermal-visible image of rescue dummy",
+        "a multispectral image of rescue dummy",
+        "rescue randy mannequin",
+        "a thermal image of rescue randy mannequin",
+        "an infrared image of rescue randy mannequin",
+        "a thermal-visible image of rescue randy mannequin",
+        "a multispectral image of rescue randy mannequin"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,269 @@
+{
+  "dataset": "fmb",
+  "shape": [
+    15,
+    768
+  ],
+  "dtype": "torch.float32",
+  "normalized": true,
+  "model": "LanguageBind_Thermal",
+  "checkpoint_dir": "/home/wislab/lzh/LanguageBind-main/pretrained_model/LanguageBind_Thermal",
+  "device_used": "cpu",
+  "created_at": "2026-04-24T11:23:32",
+  "classes": [
+    {
+      "class_id": 0,
+      "label": "unlabeled",
+      "aliases": [
+        "background",
+        "unlabeled region",
+        "background region"
+      ],
+      "prompts": [
+        "background",
+        "background region",
+        "unlabeled region",
+        "a thermal-visible scene background",
+        "an infrared scene background"
+      ]
+    },
+    {
+      "class_id": 1,
+      "label": "Road",
+      "aliases": [
+        "road"
+      ],
+      "prompts": [
+        "road",
+        "a thermal image of road",
+        "an infrared image of road",
+        "a thermal-visible image of road",
+        "a multispectral image of road"
+      ]
+    },
+    {
+      "class_id": 2,
+      "label": "Sidewalk",
+      "aliases": [
+        "sidewalk",
+        "pavement"
+      ],
+      "prompts": [
+        "sidewalk",
+        "a thermal image of sidewalk",
+        "an infrared image of sidewalk",
+        "a thermal-visible image of sidewalk",
+        "a multispectral image of sidewalk",
+        "pavement",
+        "a thermal image of pavement",
+        "an infrared image of pavement",
+        "a thermal-visible image of pavement",
+        "a multispectral image of pavement"
+      ]
+    },
+    {
+      "class_id": 3,
+      "label": "Building",
+      "aliases": [
+        "building"
+      ],
+      "prompts": [
+        "building",
+        "a thermal image of building",
+        "an infrared image of building",
+        "a thermal-visible image of building",
+        "a multispectral image of building"
+      ]
+    },
+    {
+      "class_id": 4,
+      "label": "Traffic Lamp",
+      "aliases": [
+        "traffic light",
+        "traffic lamp"
+      ],
+      "prompts": [
+        "traffic light",
+        "a thermal image of traffic light",
+        "an infrared image of traffic light",
+        "a thermal-visible image of traffic light",
+        "a multispectral image of traffic light",
+        "traffic lamp",
+        "a thermal image of traffic lamp",
+        "an infrared image of traffic lamp",
+        "a thermal-visible image of traffic lamp",
+        "a multispectral image of traffic lamp"
+      ]
+    },
+    {
+      "class_id": 5,
+      "label": "Traffic Sign",
+      "aliases": [
+        "traffic sign",
+        "road sign"
+      ],
+      "prompts": [
+        "traffic sign",
+        "a thermal image of traffic sign",
+        "an infrared image of traffic sign",
+        "a thermal-visible image of traffic sign",
+        "a multispectral image of traffic sign",
+        "road sign",
+        "a thermal image of road sign",
+        "an infrared image of road sign",
+        "a thermal-visible image of road sign",
+        "a multispectral image of road sign"
+      ]
+    },
+    {
+      "class_id": 6,
+      "label": "Vegetation",
+      "aliases": [
+        "vegetation",
+        "plants"
+      ],
+      "prompts": [
+        "vegetation",
+        "a thermal image of vegetation",
+        "an infrared image of vegetation",
+        "a thermal-visible image of vegetation",
+        "a multispectral image of vegetation",
+        "plants",
+        "a thermal image of plants",
+        "an infrared image of plants",
+        "a thermal-visible image of plants",
+        "a multispectral image of plants"
+      ]
+    },
+    {
+      "class_id": 7,
+      "label": "Sky",
+      "aliases": [
+        "sky"
+      ],
+      "prompts": [
+        "sky",
+        "a thermal image of sky",
+        "an infrared image of sky",
+        "a thermal-visible image of sky",
+        "a multispectral image of sky"
+      ]
+    },
+    {
+      "class_id": 8,
+      "label": "Person",
+      "aliases": [
+        "person",
+        "pedestrian"
+      ],
+      "prompts": [
+        "person",
+        "a thermal image of person",
+        "an infrared image of person",
+        "a thermal-visible image of person",
+        "a multispectral image of person",
+        "pedestrian",
+        "a thermal image of pedestrian",
+        "an infrared image of pedestrian",
+        "a thermal-visible image of pedestrian",
+        "a multispectral image of pedestrian"
+      ]
+    },
+    {
+      "class_id": 9,
+      "label": "Car",
+      "aliases": [
+        "car"
+      ],
+      "prompts": [
+        "car",
+        "a thermal image of car",
+        "an infrared image of car",
+        "a thermal-visible image of car",
+        "a multispectral image of car"
+      ]
+    },
+    {
+      "class_id": 10,
+      "label": "Truck",
+      "aliases": [
+        "truck"
+      ],
+      "prompts": [
+        "truck",
+        "a thermal image of truck",
+        "an infrared image of truck",
+        "a thermal-visible image of truck",
+        "a multispectral image of truck"
+      ]
+    },
+    {
+      "class_id": 11,
+      "label": "Bus",
+      "aliases": [
+        "bus"
+      ],
+      "prompts": [
+        "bus",
+        "a thermal image of bus",
+        "an infrared image of bus",
+        "a thermal-visible image of bus",
+        "a multispectral image of bus"
+      ]
+    },
+    {
+      "class_id": 12,
+      "label": "Motorcycle",
+      "aliases": [
+        "motorcycle"
+      ],
+      "prompts": [
+        "motorcycle",
+        "a thermal image of motorcycle",
+        "an infrared image of motorcycle",
+        "a thermal-visible image of motorcycle",
+        "a multispectral image of motorcycle"
+      ]
+    },
+    {
+      "class_id": 13,
+      "label": "Bicycle",
+      "aliases": [
+        "bicycle",
+        "bike"
+      ],
+      "prompts": [
+        "bicycle",
+        "a thermal image of bicycle",
+        "an infrared image of bicycle",
+        "a thermal-visible image of bicycle",
+        "a multispectral image of bicycle",
+        "bike",
+        "a thermal image of bike",
+        "an infrared image of bike",
+        "a thermal-visible image of bike",
+        "a multispectral image of bike"
+      ]
+    },
+    {
+      "class_id": 14,
+      "label": "Pole",
+      "aliases": [
+        "pole",
+        "utility pole"
+      ],
+      "prompts": [
+        "pole",
+        "a thermal image of pole",
+        "an infrared image of pole",
+        "a thermal-visible image of pole",
+        "a multispectral image of pole",
+        "utility pole",
+        "a thermal image of utility pole",
+        "an infrared image of utility pole",
+        "a thermal-visible image of utility pole",
+        "a multispectral image of utility pole"
+      ]
+    }
+  ]
+}

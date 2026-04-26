@@ -10,23 +10,29 @@ fi
 DATASET_DIR="${DATASET_DIR:-$DEFAULT_DATASET_DIR}"
 PRETRAINED_PATH="${PRETRAINED_PATH:-$PROJECT_ROOT/pretrained_model/swinv2_tiny_patch4_window16_256.pth}"
 CONFIG_BASE="${CONFIG_BASE:-$PROJECT_ROOT/configs/PSTdataset/ablation/semoe_class_router.yaml}"
-WORK_DIR="${WORK_DIR:-$PROJECT_ROOT/checkpoints/tune_class_embed_dim}"
+WORK_DIR="${WORK_DIR:-$PROJECT_ROOT/checkpoints/tune_class_probe_weight}"
 NUM_GPUS="${NUM_GPUS:-1}"
-IMS_PER_BATCH="${IMS_PER_BATCH:-12}"
+IMS_PER_BATCH="${IMS_PER_BATCH:-8}"
 CHECK_VAL_EVERY_N_EPOCH="${CHECK_VAL_EVERY_N_EPOCH:-1}"
+CLASS_EMBED_DIM="${CLASS_EMBED_DIM:-768}"
+CLASS_EMBEDDING_PATH="${CLASS_EMBEDDING_PATH:-$PROJECT_ROOT/cls_embed/pst_class_embedding.pt}"
 LOSS_BALANCE_WEIGHT="${LOSS_BALANCE_WEIGHT:-0.01}"
-EXPERT_DEPTH="${EXPERT_DEPTH:-1}"
-CLASS_INDEPENDENT="${CLASS_INDEPENDENT:-false}"
-USE_CLASS_PROBE_LOSS="${USE_CLASS_PROBE_LOSS:-false}"
-LOSS_CLASS_PROBE_WEIGHT="${LOSS_CLASS_PROBE_WEIGHT:-0.2}"
-EPOCHS="${EPOCHS:-300}"
-VALUES_STRING="${VALUES:-64 128 256 384 512}"
+EXPERT_DEPTH="${EXPERT_DEPTH:-2}"
+CLASS_INDEPENDENT="${CLASS_INDEPENDENT:-true}"
+USE_CLASS_PROBE_LOSS="${USE_CLASS_PROBE_LOSS:-true}"
+EPOCHS="${EPOCHS:-500}"
+VALUES_STRING="${VALUES:-0.5}"
 read -r -a VALUES <<< "$VALUES_STRING"
 
 mkdir -p "$WORK_DIR"
 
 if [[ ! -d "$DATASET_DIR/train/rgb" ]]; then
   echo "Missing dataset directory: $DATASET_DIR/train/rgb"
+  exit 1
+fi
+
+if [[ ! -f "$CLASS_EMBEDDING_PATH" ]]; then
+  echo "Missing class embedding file: $CLASS_EMBEDDING_PATH"
   exit 1
 fi
 
@@ -41,10 +47,12 @@ fi
 
 STEPS_PER_EPOCH=$(( TRAIN_SAMPLES / IMS_PER_BATCH ))
 MAX_ITER=$(( STEPS_PER_EPOCH * EPOCHS ))
-SUMMARY_FILE="$WORK_DIR/sweep_summary.txt"
+RUN_TAG="$(date +%Y%m%d_%H%M%S)"
+SUMMARY_FILE="$WORK_DIR/sweep_summary_${RUN_TAG}.txt"
+LATEST_SUMMARY_LINK="$WORK_DIR/sweep_summary_latest.txt"
 
 {
-  echo "parameter: CLASS_EMBED_DIM"
+  echo "parameter: LOSS_CLASS_PROBE_WEIGHT"
   echo "values: ${VALUES[*]}"
   echo "epochs: $EPOCHS"
   echo "train_samples: $TRAIN_SAMPLES"
@@ -53,9 +61,11 @@ SUMMARY_FILE="$WORK_DIR/sweep_summary.txt"
   echo "max_iter: $MAX_ITER"
   echo
 } > "$SUMMARY_FILE"
+ln -sfn "$SUMMARY_FILE" "$LATEST_SUMMARY_LINK"
 
 for VALUE in "${VALUES[@]}"; do
-  EXP_NAME="pst_ced_${VALUE}_ep${EPOCHS}"
+  SAFE_VALUE="${VALUE//./p}"
+  EXP_NAME="pst_cpw_${SAFE_VALUE}_ep${EPOCHS}"
   TMP_CONFIG="/tmp/${EXP_NAME}_$(date +%Y%m%d_%H%M%S).yaml"
 
   cat > "$TMP_CONFIG" <<EOF
@@ -77,7 +87,8 @@ MODEL:
     FUSION_TYPE: "semoe"
     ROUTER_TYPE: "class_aware"
     SEMOE_CHANNEL_WISE: True
-    CLASS_EMBED_DIM: $VALUE
+    CLASS_EMBED_DIM: $CLASS_EMBED_DIM
+    CLASS_EMBEDDING_PATH: "$CLASS_EMBEDDING_PATH"
     EXPERT_DEPTH: $EXPERT_DEPTH
     CLASS_INDEPENDENT: $CLASS_INDEPENDENT
   MASK_FORMER:
@@ -85,7 +96,7 @@ MODEL:
     RECURSIVE_REROUTING: False
     LOSS_BALANCE_WEIGHT: $LOSS_BALANCE_WEIGHT
     USE_CLASS_PROBE_LOSS: $USE_CLASS_PROBE_LOSS
-    LOSS_CLASS_PROBE_WEIGHT: $LOSS_CLASS_PROBE_WEIGHT
+    LOSS_CLASS_PROBE_WEIGHT: $VALUE
     LOSS_AUX_WEIGHT: 0.0
     USE_CONSISTENCY_LOSS: False
     LOSS_CONSISTENCY_WEIGHT: 0.0
@@ -94,12 +105,13 @@ EOF
   echo "==================================================" | tee -a "$SUMMARY_FILE"
   echo "start: $(date '+%F %T')" | tee -a "$SUMMARY_FILE"
   echo "exp_name: $EXP_NAME" | tee -a "$SUMMARY_FILE"
-  echo "CLASS_EMBED_DIM: $VALUE" | tee -a "$SUMMARY_FILE"
+  echo "LOSS_CLASS_PROBE_WEIGHT: $VALUE" | tee -a "$SUMMARY_FILE"
+  echo "CLASS_EMBED_DIM: $CLASS_EMBED_DIM" | tee -a "$SUMMARY_FILE"
+  echo "CLASS_EMBEDDING_PATH: $CLASS_EMBEDDING_PATH" | tee -a "$SUMMARY_FILE"
   echo "EXPERT_DEPTH: $EXPERT_DEPTH" | tee -a "$SUMMARY_FILE"
   echo "CLASS_INDEPENDENT: $CLASS_INDEPENDENT" | tee -a "$SUMMARY_FILE"
   echo "LOSS_BALANCE_WEIGHT: $LOSS_BALANCE_WEIGHT" | tee -a "$SUMMARY_FILE"
   echo "USE_CLASS_PROBE_LOSS: $USE_CLASS_PROBE_LOSS" | tee -a "$SUMMARY_FILE"
-  echo "LOSS_CLASS_PROBE_WEIGHT: $LOSS_CLASS_PROBE_WEIGHT" | tee -a "$SUMMARY_FILE"
   echo "config: $TMP_CONFIG" | tee -a "$SUMMARY_FILE"
 
   "$PYTHON_BIN" "$PROJECT_ROOT/train.py" \

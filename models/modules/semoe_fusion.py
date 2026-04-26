@@ -8,7 +8,9 @@ for semantic-aware mixture-of-experts fusion on 4D feature maps.
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, Union
+import json
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -19,6 +21,75 @@ def _validate_expert_depth(depth: int) -> int:
     if depth < 1:
         raise ValueError(f"expert_depth must be >= 1, got {depth}.")
     return depth
+
+
+def _load_class_embedding_tensor(
+    embedding_path: Union[str, Path],
+    num_classes: int,
+    embed_dim: int,
+) -> Tuple[torch.Tensor, Dict[str, Any]]:
+    path = Path(embedding_path)
+    expected_shape = (num_classes, embed_dim)
+    report: Dict[str, Any] = {
+        "status": "not_loaded",
+        "success": False,
+        "path": str(path),
+        "expected_shape": list(expected_shape),
+        "meta_found": False,
+    }
+    if not path.is_file():
+        raise FileNotFoundError(f"class embedding file not found: {path}")
+
+    payload = torch.load(path, map_location="cpu")
+    if torch.is_tensor(payload):
+        tensor = payload
+    elif isinstance(payload, dict):
+        tensor = None
+        for key in ("embeddings", "class_embeddings", "weight", "tensor"):
+            value = payload.get(key)
+            if torch.is_tensor(value):
+                tensor = value
+                break
+        if tensor is None and len(payload) == 1:
+            only_value = next(iter(payload.values()))
+            if torch.is_tensor(only_value):
+                tensor = only_value
+        if tensor is None:
+            raise TypeError(
+                f"Unsupported class embedding payload in {path}. Expected a tensor or a dict containing a tensor."
+            )
+    else:
+        raise TypeError(f"Unsupported class embedding file content in {path}: {type(payload)}")
+
+    tensor = tensor.detach().float().cpu().contiguous()
+    report["loaded_shape"] = list(tensor.shape)
+    report["loaded_dtype"] = str(tensor.dtype)
+    if tensor.ndim != 2:
+        raise ValueError(
+            f"class embedding tensor must be 2D [num_classes, embed_dim], got shape {tuple(tensor.shape)} from {path}"
+        )
+    if tuple(tensor.shape) != expected_shape:
+        raise ValueError(
+            f"class embedding shape mismatch for {path}: expected {expected_shape}, got {tuple(tensor.shape)}"
+        )
+
+    meta_path = path.with_suffix(".meta.json")
+    if meta_path.is_file():
+        report["meta_found"] = True
+        try:
+            with meta_path.open("r", encoding="utf-8") as f:
+                meta = json.load(f)
+            classes = meta.get("classes", [])
+            report["meta_class_count"] = len(classes)
+            report["meta_labels"] = [item.get("label", "") for item in classes]
+            report["meta_labels_preview"] = [item.get("label", "") for item in classes[: min(5, len(classes))]]
+        except Exception as exc:  # pragma: no cover - best-effort metadata parsing
+            report["meta_error"] = str(exc)
+
+    report["status"] = "loaded"
+    report["success"] = True
+    report["row_norm_mean"] = float(tensor.norm(dim=1).mean().item())
+    return tensor, report
 
 
 class _ResidualExpertCore(nn.Module):
@@ -231,10 +302,10 @@ class SeMoEFusionBlock(nn.Module):
         alpha_shared = alpha[:, 2]
 
         self.latest_router_weights = {
-            "alpha": alpha.detach(),
-            "alpha_rgb": alpha_rgb.detach(),
-            "alpha_t": alpha_t.detach(),
-            "alpha_shared": alpha_shared.detach(),
+            "alpha": alpha,
+            "alpha_rgb": alpha_rgb,
+            "alpha_t": alpha_t,
+            "alpha_shared": alpha_shared,
         }
 
         fused_feat = alpha_rgb * rgb_e + alpha_t * thermal_e + alpha_shared * shared_e
@@ -274,14 +345,41 @@ class ClassAwareSemanticRouter(nn.Module):
         in_channels: int,
         embed_dim: int,
         channel_wise: bool = False,
+        class_embedding_path: str = "",
+        stage_name: str = "",
     ) -> None:
         super().__init__()
         self.num_classes = num_classes
         self.in_channels = in_channels
         self.embed_dim = embed_dim
         self.channel_wise = channel_wise
+        self.class_embedding_path = class_embedding_path
+        self.stage_name = stage_name
 
         self.class_embeddings = nn.Embedding(num_classes, embed_dim)
+        self.class_embedding_load_report: Dict[str, Any] = {
+            "stage": self.stage_name,
+            "status": "random_init",
+            "success": False,
+            "path": self.class_embedding_path,
+            "expected_shape": [self.num_classes, self.embed_dim],
+        }
+        if self.class_embedding_path:
+            loaded_tensor, load_report = _load_class_embedding_tensor(
+                self.class_embedding_path,
+                num_classes=self.num_classes,
+                embed_dim=self.embed_dim,
+            )
+            with torch.no_grad():
+                self.class_embeddings.weight.copy_(loaded_tensor)
+            max_abs_diff = float(
+                (self.class_embeddings.weight.detach().cpu() - loaded_tensor).abs().max().item()
+            )
+            load_report["stage"] = self.stage_name
+            load_report["verified"] = max_abs_diff < 1e-7
+            load_report["max_abs_diff"] = max_abs_diff
+            self.class_embedding_load_report = load_report
+
         self.visual_pool = nn.AdaptiveAvgPool2d(1)
         self.visual_proj = nn.Sequential(
             nn.Conv2d(in_channels * 3, embed_dim, kernel_size=1, bias=True),
@@ -367,6 +465,8 @@ class ClassAwareSeMoEFusionBlock(nn.Module):
         channel_wise: bool = False,
         efficient_mode: bool = False,
         expert_depth: int = 1,
+        class_embedding_path: str = "",
+        stage_name: str = "",
     ) -> None:
         super().__init__()
         self.num_classes = num_classes
@@ -374,6 +474,7 @@ class ClassAwareSeMoEFusionBlock(nn.Module):
         self.channel_wise = channel_wise
         self.efficient_mode = efficient_mode
         self.expert_depth = _validate_expert_depth(expert_depth)
+        self.latest_router_weights = {}
 
         self.rgb_expert = RGBExpert(in_channels, depth=self.expert_depth) # RGB专家
         self.thermal_expert = ThermalExpert(in_channels, depth=self.expert_depth) # 红外专家
@@ -383,7 +484,10 @@ class ClassAwareSeMoEFusionBlock(nn.Module):
             in_channels=in_channels,
             embed_dim=embed_dim,
             channel_wise=channel_wise,
+            class_embedding_path=class_embedding_path,
+            stage_name=stage_name,
         )
+        self.class_embedding_load_report = dict(self.router.class_embedding_load_report)
 
     def forward(
         self,
@@ -403,6 +507,9 @@ class ClassAwareSeMoEFusionBlock(nn.Module):
         thermal_e = self.thermal_expert(thermal_feat)
         shared_e = self.shared_expert(rgb_feat, thermal_feat)
         routing_weights = self.router(rgb_e, thermal_e, shared_e)
+        self.latest_router_weights = {
+            "routing_weights": routing_weights,
+        }
 
         if self.efficient_mode:
             if self.channel_wise:

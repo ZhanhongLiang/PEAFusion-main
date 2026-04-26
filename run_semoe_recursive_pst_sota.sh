@@ -35,6 +35,7 @@ CONFIG_BASE="${CONFIG_BASE:-$DEFAULT_CONFIG_BASE}"
 NUM_GPUS="${NUM_GPUS:-1}"
 IMS_PER_BATCH="${IMS_PER_BATCH:-4}"
 EXPERT_DEPTH="${EXPERT_DEPTH:-1}"
+CLASS_INDEPENDENT="${CLASS_INDEPENDENT:-false}"
 SEED="${SEED:-1024}"
 WORK_DIR="${WORK_DIR:-$PROJECT_ROOT/checkpoints}"
 EXP_NAME="${EXP_NAME:-semoe_recursive_pst_sota_try1}"
@@ -98,6 +99,7 @@ MODEL:
     ROUTER_TYPE: "class_aware"
     SEMOE_CHANNEL_WISE: True
     EXPERT_DEPTH: $EXPERT_DEPTH
+    CLASS_INDEPENDENT: $CLASS_INDEPENDENT
   MASK_FORMER:
     DECODER_TYPE: "semantic_query"
     RECURSIVE_REROUTING: True
@@ -121,6 +123,7 @@ echo "Core switches:"
 echo "  ims_per_batch=$IMS_PER_BATCH"
 echo "  backbone_size=$BACKBONE_SIZE"
 echo "  expert_depth=$EXPERT_DEPTH"
+echo "  class_independent=$CLASS_INDEPENDENT"
 echo "  use_semoe_fusion=True"
 echo "  router_type=class_aware"
 echo "  decoder_type=semantic_query"

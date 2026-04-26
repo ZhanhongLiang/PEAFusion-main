@@ -64,6 +64,38 @@ class EpochMetricsFileLogger(Callback):
             return f"{value:.6f}"
         return str(value)
 
+    @staticmethod
+    def _collect_metric(metrics, payload, key):
+        if key not in metrics:
+            return
+        scalar = EpochMetricsFileLogger._to_scalar(metrics[key])
+        if scalar is not None:
+            payload[key] = scalar
+
+    @staticmethod
+    def _format_class_embedding_report(report, label_list=None):
+        parts = [
+            f"stage: {report.get('stage', 'unknown')}",
+            f"status: {report.get('status', 'unknown')}",
+            f"path: {report.get('path', '') or '<random_init>'}",
+            f"expected_shape: {report.get('expected_shape')}",
+        ]
+        if report.get("loaded_shape") is not None:
+            parts.append(f"loaded_shape: {report.get('loaded_shape')}")
+        if "verified" in report:
+            parts.append(f"verified: {report.get('verified')}")
+        if "row_norm_mean" in report:
+            parts.append(f"row_norm_mean: {EpochMetricsFileLogger._format_metric_value(report['row_norm_mean'])}")
+        if "max_abs_diff" in report:
+            parts.append(f"max_abs_diff: {EpochMetricsFileLogger._format_metric_value(report['max_abs_diff'])}")
+        if report.get("meta_found"):
+            parts.append(f"meta_class_count: {report.get('meta_class_count', 'unknown')}")
+            if report.get("meta_labels_preview"):
+                parts.append(f"meta_labels_preview: {report['meta_labels_preview']}")
+            if label_list is not None and report.get("meta_labels") is not None:
+                parts.append(f"label_match: {report['meta_labels'] == list(label_list)}")
+        return "    ".join(parts)
+
     def on_fit_start(self, trainer, pl_module):
         model = pl_module.network
         total_params = sum(p.numel() for p in model.parameters())
@@ -71,6 +103,7 @@ class EpochMetricsFileLogger(Callback):
         state_dict_keys = len(model.state_dict())
         parameter_keys = len(list(model.named_parameters()))
         module_keys = len(list(model.named_modules()))
+        class_embedding_reports = getattr(model.backbone, "class_embedding_load_report", [])
 
         with open(self.log_path, "w", encoding="utf-8") as f:
             f.write("=== Experiment Summary ===\n")
@@ -85,9 +118,19 @@ class EpochMetricsFileLogger(Callback):
             f.write(f"decoder_type: {self.cfg.MODEL.MASK_FORMER.DECODER_TYPE}\n")
             f.write(f"recursive_rerouting: {self.cfg.MODEL.MASK_FORMER.RECURSIVE_REROUTING}\n")
             f.write(f"class_embed_dim: {self.cfg.MODEL.FUSION.CLASS_EMBED_DIM}\n")
+            f.write(f"class_embedding_path: {self.cfg.MODEL.FUSION.CLASS_EMBEDDING_PATH}\n")
             f.write(f"expert_depth: {self.cfg.MODEL.FUSION.EXPERT_DEPTH}\n")
+            f.write(f"class_independent: {self.cfg.MODEL.FUSION.CLASS_INDEPENDENT}\n")
             f.write(f"loss_balance_weight: {self.cfg.MODEL.MASK_FORMER.LOSS_BALANCE_WEIGHT}\n")
+            f.write(f"use_class_probe_loss: {self.cfg.MODEL.MASK_FORMER.USE_CLASS_PROBE_LOSS}\n")
+            f.write(f"loss_class_probe_weight: {self.cfg.MODEL.MASK_FORMER.LOSS_CLASS_PROBE_WEIGHT}\n")
             f.write(f"num_classes: {self.cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES}\n")
+            f.write("\n=== Class Embedding Init ===\n")
+            if class_embedding_reports:
+                for report in class_embedding_reports:
+                    f.write(self._format_class_embedding_report(report, pl_module.label_list) + "\n")
+            else:
+                f.write("status: unavailable\n")
             f.write("\n=== Model Stats ===\n")
             f.write(f"meta_architecture: {self.cfg.MODEL.META_ARCHITECTURE}\n")
             f.write(f"model_class: {model.__class__.__name__}\n")
@@ -105,6 +148,12 @@ class EpochMetricsFileLogger(Callback):
             f.write("\n\n=== Epoch Metrics ===\n")
         with open(self.step_log_path, "w", encoding="utf-8") as f:
             f.write("=== Train Step Metrics ===\n")
+        print("=== Class Embedding Init ===", flush=True)
+        if class_embedding_reports:
+            for report in class_embedding_reports:
+                print(self._format_class_embedding_report(report, pl_module.label_list), flush=True)
+        else:
+            print("status: unavailable", flush=True)
 
     def _append_metrics(self, trainer, stage):
         metrics = trainer.callback_metrics
@@ -115,15 +164,15 @@ class EpochMetricsFileLogger(Callback):
         }
         for key in [
             "train/total_loss",
+            "train/maskformer_loss",
+            "train/loss_balance",
+            "train/loss_class_probe",
             "val/average_precision",
             "val/average_recall",
             "val/average_IoU",
             "val/allAcc",
         ]:
-            if key in metrics:
-                scalar = self._to_scalar(metrics[key])
-                if scalar is not None:
-                    payload[key] = scalar
+            self._collect_metric(metrics, payload, key)
 
         line_parts = [
             f"epoch: {payload['epoch']}",
@@ -131,7 +180,13 @@ class EpochMetricsFileLogger(Callback):
             f"stage: {payload['stage']}",
         ]
         if "train/total_loss" in payload:
-            line_parts.append(f"loss: {self._format_metric_value(payload['train/total_loss'])}")
+            line_parts.append(f"total_loss: {self._format_metric_value(payload['train/total_loss'])}")
+        if "train/maskformer_loss" in payload:
+            line_parts.append(f"maskformer_loss: {self._format_metric_value(payload['train/maskformer_loss'])}")
+        if "train/loss_balance" in payload:
+            line_parts.append(f"balance_loss: {self._format_metric_value(payload['train/loss_balance'])}")
+        if "train/loss_class_probe" in payload:
+            line_parts.append(f"class_probe_loss: {self._format_metric_value(payload['train/loss_class_probe'])}")
         if "val/average_precision" in payload:
             line_parts.append(f"precision: {self._format_metric_value(payload['val/average_precision'])}")
         if "val/average_recall" in payload:
@@ -152,21 +207,40 @@ class EpochMetricsFileLogger(Callback):
                 if best_path:
                     line_parts.append(f"best_ckpt: {best_path}")
 
+        summary_line = "    ".join(line_parts)
         with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write("    ".join(line_parts) + "\n")
+            f.write(summary_line + "\n")
+        print(summary_line, flush=True)
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if trainer.global_step == 0 or trainer.global_step % self.step_log_interval != 0:
             return
-        scalar_loss = self._to_scalar(trainer.callback_metrics.get("train/total_loss"))
-        if scalar_loss is None:
+        payload = {
+            "epoch": trainer.current_epoch,
+            "global_step": trainer.global_step,
+        }
+        for key in [
+            "train/total_loss",
+            "train/maskformer_loss",
+            "train/loss_balance",
+            "train/loss_class_probe",
+        ]:
+            self._collect_metric(trainer.callback_metrics, payload, key)
+        if "train/total_loss" not in payload:
             return
+        line_parts = [
+            f"epoch: {payload['epoch']}",
+            f"step: {payload['global_step']}",
+            f"total_loss: {self._format_metric_value(payload['train/total_loss'])}",
+        ]
+        if "train/maskformer_loss" in payload:
+            line_parts.append(f"maskformer_loss: {self._format_metric_value(payload['train/maskformer_loss'])}")
+        if "train/loss_balance" in payload:
+            line_parts.append(f"balance_loss: {self._format_metric_value(payload['train/loss_balance'])}")
+        if "train/loss_class_probe" in payload:
+            line_parts.append(f"class_probe_loss: {self._format_metric_value(payload['train/loss_class_probe'])}")
         with open(self.step_log_path, "a", encoding="utf-8") as f:
-            f.write(
-                f"epoch: {trainer.current_epoch}    "
-                f"step: {trainer.global_step}    "
-                f"loss: {self._format_metric_value(scalar_loss)}\n"
-            )
+            f.write("    ".join(line_parts) + "\n")
 
     def on_train_epoch_end(self, trainer, pl_module):
         self._append_metrics(trainer, "train_epoch_end")
@@ -202,6 +276,9 @@ def parse_args():
     parser.add_argument("--router-type", choices=["visual", "class_aware"], default=None)
     parser.add_argument("--decoder-type", choices=["baseline", "semantic_query"], default=None)
     parser.add_argument("--recursive-rerouting", choices=["true", "false"], default=None)
+    parser.add_argument("--class-independent", choices=["true", "false"], default=None)
+    parser.add_argument("--use-class-probe-loss", choices=["true", "false"], default=None)
+    parser.add_argument("--class-probe-weight", type=float, default=None)
     args = parser.parse_args()
 
     return args
@@ -230,6 +307,12 @@ def setup(args):
         cfg.MODEL.MASK_FORMER.DECODER_TYPE = args.decoder_type
     if args.recursive_rerouting is not None:
         cfg.MODEL.MASK_FORMER.RECURSIVE_REROUTING = args.recursive_rerouting == "true"
+    if args.class_independent is not None:
+        cfg.MODEL.FUSION.CLASS_INDEPENDENT = args.class_independent == "true"
+    if args.use_class_probe_loss is not None:
+        cfg.MODEL.MASK_FORMER.USE_CLASS_PROBE_LOSS = args.use_class_probe_loss == "true"
+    if args.class_probe_weight is not None:
+        cfg.MODEL.MASK_FORMER.LOSS_CLASS_PROBE_WEIGHT = args.class_probe_weight
 
     cfg.freeze()
     return cfg
@@ -253,6 +336,9 @@ def main():
         f"router={cfg.MODEL.FUSION.ROUTER_TYPE}, "
         f"class_embed_dim={cfg.MODEL.FUSION.CLASS_EMBED_DIM}, "
         f"expert_depth={cfg.MODEL.FUSION.EXPERT_DEPTH}, "
+        f"class_independent={cfg.MODEL.FUSION.CLASS_INDEPENDENT}, "
+        f"use_class_probe_loss={cfg.MODEL.MASK_FORMER.USE_CLASS_PROBE_LOSS}, "
+        f"class_probe_weight={cfg.MODEL.MASK_FORMER.LOSS_CLASS_PROBE_WEIGHT}, "
         f"decoder={cfg.MODEL.MASK_FORMER.DECODER_TYPE}, "
         f"recursive={cfg.MODEL.MASK_FORMER.RECURSIVE_REROUTING}"
     )

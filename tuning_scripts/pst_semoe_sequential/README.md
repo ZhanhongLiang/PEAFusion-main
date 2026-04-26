@@ -6,6 +6,7 @@ hyperparameters used in the current class-aware SeMoE + baseline decoder setup.
 Included scripts:
 - `tune_loss_balance_weight.sh`
 - `tune_class_embed_dim.sh`
+- `tune_class_probe_weight.sh`
 
 Skipped on purpose because they are inherited from the original PEAFusion
 training stack and you asked not to tune inherited parameters here:

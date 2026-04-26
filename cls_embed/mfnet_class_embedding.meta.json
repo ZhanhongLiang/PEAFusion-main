@@ -1,0 +1,197 @@
+{
+  "dataset": "mfnet",
+  "shape": [
+    9,
+    768
+  ],
+  "dtype": "torch.float32",
+  "normalized": true,
+  "model": "LanguageBind_Thermal",
+  "checkpoint_dir": "/home/wislab/lzh/LanguageBind-main/pretrained_model/LanguageBind_Thermal",
+  "device_used": "cpu",
+  "created_at": "2026-04-24T11:23:27",
+  "classes": [
+    {
+      "class_id": 0,
+      "label": "unlabeled",
+      "aliases": [
+        "background",
+        "unlabeled region",
+        "background region"
+      ],
+      "prompts": [
+        "background",
+        "background region",
+        "unlabeled region",
+        "a thermal-visible scene background",
+        "an infrared scene background"
+      ]
+    },
+    {
+      "class_id": 1,
+      "label": "car",
+      "aliases": [
+        "car"
+      ],
+      "prompts": [
+        "car",
+        "a thermal image of car",
+        "an infrared image of car",
+        "a thermal-visible image of car",
+        "a multispectral image of car"
+      ]
+    },
+    {
+      "class_id": 2,
+      "label": "person",
+      "aliases": [
+        "person",
+        "pedestrian"
+      ],
+      "prompts": [
+        "person",
+        "a thermal image of person",
+        "an infrared image of person",
+        "a thermal-visible image of person",
+        "a multispectral image of person",
+        "pedestrian",
+        "a thermal image of pedestrian",
+        "an infrared image of pedestrian",
+        "a thermal-visible image of pedestrian",
+        "a multispectral image of pedestrian"
+      ]
+    },
+    {
+      "class_id": 3,
+      "label": "bike",
+      "aliases": [
+        "bicycle",
+        "bike"
+      ],
+      "prompts": [
+        "bicycle",
+        "a thermal image of bicycle",
+        "an infrared image of bicycle",
+        "a thermal-visible image of bicycle",
+        "a multispectral image of bicycle",
+        "bike",
+        "a thermal image of bike",
+        "an infrared image of bike",
+        "a thermal-visible image of bike",
+        "a multispectral image of bike"
+      ]
+    },
+    {
+      "class_id": 4,
+      "label": "curve",
+      "aliases": [
+        "road curve",
+        "curved road"
+      ],
+      "prompts": [
+        "road curve",
+        "a thermal image of road curve",
+        "an infrared image of road curve",
+        "a thermal-visible image of road curve",
+        "a multispectral image of road curve",
+        "curved road",
+        "a thermal image of curved road",
+        "an infrared image of curved road",
+        "a thermal-visible image of curved road",
+        "a multispectral image of curved road"
+      ]
+    },
+    {
+      "class_id": 5,
+      "label": "car_stop",
+      "aliases": [
+        "car stop",
+        "parking barrier",
+        "road blocker"
+      ],
+      "prompts": [
+        "car stop",
+        "a thermal image of car stop",
+        "an infrared image of car stop",
+        "a thermal-visible image of car stop",
+        "a multispectral image of car stop",
+        "parking barrier",
+        "a thermal image of parking barrier",
+        "an infrared image of parking barrier",
+        "a thermal-visible image of parking barrier",
+        "a multispectral image of parking barrier",
+        "road blocker",
+        "a thermal image of road blocker",
+        "an infrared image of road blocker",
+        "a thermal-visible image of road blocker",
+        "a multispectral image of road blocker"
+      ]
+    },
+    {
+      "class_id": 6,
+      "label": "guardrail",
+      "aliases": [
+        "guardrail",
+        "road guardrail"
+      ],
+      "prompts": [
+        "guardrail",
+        "a thermal image of guardrail",
+        "an infrared image of guardrail",
+        "a thermal-visible image of guardrail",
+        "a multispectral image of guardrail",
+        "road guardrail",
+        "a thermal image of road guardrail",
+        "an infrared image of road guardrail",
+        "a thermal-visible image of road guardrail",
+        "a multispectral image of road guardrail"
+      ]
+    },
+    {
+      "class_id": 7,
+      "label": "color_cone",
+      "aliases": [
+        "traffic cone",
+        "color cone",
+        "road cone"
+      ],
+      "prompts": [
+        "traffic cone",
+        "a thermal image of traffic cone",
+        "an infrared image of traffic cone",
+        "a thermal-visible image of traffic cone",
+        "a multispectral image of traffic cone",
+        "color cone",
+        "a thermal image of color cone",
+        "an infrared image of color cone",
+        "a thermal-visible image of color cone",
+        "a multispectral image of color cone",
+        "road cone",
+        "a thermal image of road cone",
+        "an infrared image of road cone",
+        "a thermal-visible image of road cone",
+        "a multispectral image of road cone"
+      ]
+    },
+    {
+      "class_id": 8,
+      "label": "bump",
+      "aliases": [
+        "speed bump",
+        "road bump"
+      ],
+      "prompts": [
+        "speed bump",
+        "a thermal image of speed bump",
+        "an infrared image of speed bump",
+        "a thermal-visible image of speed bump",
+        "a multispectral image of speed bump",
+        "road bump",
+        "a thermal image of road bump",
+        "an infrared image of road bump",
+        "a thermal-visible image of road bump",
+        "a multispectral image of road bump"
+      ]
+    }
+  ]
+}

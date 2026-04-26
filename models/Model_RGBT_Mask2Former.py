@@ -57,6 +57,26 @@ class Model_RGBT_Mask2Former(LightningModule):
             self.val_iou = MulticlassJaccardIndex(num_classes=self.num_classes,average=None, dist_sync_on_step=True, ignore_index=0)
 
         self.network = RGBTMaskFormer(cfg)
+        self.use_class_probe_loss = cfg.MODEL.MASK_FORMER.USE_CLASS_PROBE_LOSS
+        self.class_probe_loss_weight = cfg.MODEL.MASK_FORMER.LOSS_CLASS_PROBE_WEIGHT
+        if self.use_class_probe_loss:
+            if (
+                not cfg.MODEL.FUSION.USE_SEMOE_FUSION
+                or cfg.MODEL.FUSION.ROUTER_TYPE != "class_aware"
+                or not cfg.MODEL.FUSION.CLASS_INDEPENDENT
+            ):
+                raise ValueError(
+                    "USE_CLASS_PROBE_LOSS requires SeMoE fusion with ROUTER_TYPE='class_aware' "
+                    "and MODEL.FUSION.CLASS_INDEPENDENT=True."
+                )
+            probe_in_channels = cfg.MODEL.SWIN.EMBED_DIM
+            self.network.class_probe_head = nn.Conv2d(
+                probe_in_channels, 1, kernel_size=1, stride=1, padding=0, bias=True
+            )
+            nn.init.xavier_uniform_(self.network.class_probe_head.weight)
+            nn.init.constant_(self.network.class_probe_head.bias, 0.0)
+        else:
+            self.network.class_probe_head = None
         self.optimizer = self.build_optimizer(cfg, self.network)
         self.scheduler = self.build_lr_scheduler(cfg, self.optimizer)
         self.automatic_optimization = False
@@ -226,15 +246,28 @@ class Model_RGBT_Mask2Former(LightningModule):
         router_weights = router_weights.movedim(expert_dim, -1)
         return router_weights.reshape(-1, 3)
 
-    def _compute_expert_balance_loss(self, aux_outputs):
+    def _compute_expert_balance_loss(self):
         if self.balance_loss_weight <= 0:
             return None
 
+        backbone = getattr(self.network, "backbone", None)
+        if backbone is None:
+            return None
+
+        stage_router_weights = getattr(backbone, "latest_stage_router_weights", {})
+        if not isinstance(stage_router_weights, dict) or len(stage_router_weights) == 0:
+            return None
+
         collected = []
-        for aux_output in aux_outputs:
-            if "router_weights" not in aux_output:
+        for _, stage_output in sorted(stage_router_weights.items()):
+            if not isinstance(stage_output, dict):
                 continue
-            flattened_usage = self._flatten_router_usage(aux_output["router_weights"])
+            router_weights = stage_output.get("routing_weights")
+            if router_weights is None:
+                router_weights = stage_output.get("alpha")
+            if router_weights is None:
+                continue
+            flattened_usage = self._flatten_router_usage(router_weights)
             collected.append(flattened_usage.mean(dim=0))
 
         if len(collected) == 0:
@@ -243,6 +276,79 @@ class Model_RGBT_Mask2Former(LightningModule):
         usage = torch.stack(collected, dim=0).mean(dim=0)
         target = torch.full_like(usage, 1.0 / 3.0)
         return ((usage - target) ** 2).sum()
+
+    def _background_class_offset(self):
+        if not hasattr(self, "label_list") or len(self.label_list) == 0:
+            return 0
+        first_label = self.label_list[0].lower()
+        if "unlabeled" in first_label or "background" in first_label:
+            return 1
+        return 0
+
+    def _compute_class_probe_loss(self, labels):
+        if not self.use_class_probe_loss or self.class_probe_loss_weight <= 0:
+            return None
+
+        class_probe_head = getattr(self.network, "class_probe_head", None)
+        if class_probe_head is None:
+            return None
+
+        backbone = getattr(self.network, "backbone", None)
+        if backbone is None:
+            return None
+
+        class_features = getattr(backbone, "latest_stage_class_features", {}).get("stage_2")
+        if class_features is None:
+            return None
+        if class_features.dim() != 5:
+            raise ValueError(
+                f"Expected class-specific features with shape [B, K, C, H, W], got {tuple(class_features.shape)}."
+            )
+
+        labels = labels.to(class_features.device).long()
+        batch_size, num_classes, channels, height, width = class_features.shape
+        if num_classes != self.num_classes:
+            raise ValueError(
+                f"Expected {self.num_classes} class-specific features, got {num_classes}."
+            )
+
+        probe_logits = class_probe_head(
+            class_features.reshape(batch_size * num_classes, channels, height, width)
+        ).view(batch_size, num_classes, height, width)
+        probe_logits = F.interpolate(
+            probe_logits,
+            size=labels.shape[-2:],
+            mode="bilinear",
+            align_corners=False,
+        )
+
+        valid_pixels = labels != self.ignore_label
+        class_ids = torch.arange(num_classes, device=labels.device).view(1, num_classes, 1, 1)
+        target_masks = (labels.unsqueeze(1) == class_ids) & valid_pixels.unsqueeze(1)
+
+        valid_mask = valid_pixels.unsqueeze(1).float()
+        target_masks = target_masks.float()
+
+        bce_map = F.binary_cross_entropy_with_logits(
+            probe_logits, target_masks, reduction="none"
+        )
+        valid_count = valid_mask.flatten(2).sum(dim=-1).clamp_min(1.0)
+        bce_per_class = (bce_map * valid_mask).flatten(2).sum(dim=-1) / valid_count
+
+        pred_prob = torch.sigmoid(probe_logits) * valid_mask
+        target_prob = target_masks * valid_mask
+        intersection = (pred_prob * target_prob).flatten(2).sum(dim=-1)
+        denominator = pred_prob.flatten(2).sum(dim=-1) + target_prob.flatten(2).sum(dim=-1)
+        dice_per_class = 1.0 - (2.0 * intersection + 1.0) / (denominator + 1.0)
+
+        present_classes = target_masks.flatten(2).sum(dim=-1) > 0
+        present_classes[:, : self._background_class_offset()] = False
+
+        if not present_classes.any():
+            return None
+
+        probe_loss = (bce_per_class + dice_per_class)[present_classes].mean()
+        return probe_loss
 
     def _forward_semantic_logits(self, batch_data, drop_mode=None, no_grad=False):
         batch_copy = []
@@ -291,17 +397,24 @@ class Model_RGBT_Mask2Former(LightningModule):
         # get network output
         losses_dict, attention_maps = self.network(batch_data)
         losses_dict = self._apply_aux_loss_weight(losses_dict)
+        maskformer_loss = sum(losses_dict.values())
 
-        with torch.no_grad():
-            aux_outputs = getattr(self.network.sem_seg_head.predictor, "latest_aux_outputs", [])
+        loss_balance_value = maskformer_loss.new_zeros(())
+        loss_class_probe_value = maskformer_loss.new_zeros(())
 
-        loss_balance = self._compute_expert_balance_loss(aux_outputs)
+        loss_balance = self._compute_expert_balance_loss()
         if loss_balance is not None:
-            losses_dict["loss_balance"] = loss_balance * self.balance_loss_weight
+            loss_balance_value = loss_balance * self.balance_loss_weight
+            losses_dict["loss_balance"] = loss_balance_value
 
         loss_consistency = self._compute_consistency_loss(batch_data)
         if loss_consistency is not None:
             losses_dict["loss_consistency"] = loss_consistency * self.consistency_loss_weight
+
+        loss_class_probe = self._compute_class_probe_loss(labels)
+        if loss_class_probe is not None:
+            loss_class_probe_value = loss_class_probe * self.class_probe_loss_weight
+            losses_dict["loss_class_probe"] = loss_class_probe_value
 
         loss = sum(losses_dict.values()) 
 
@@ -312,7 +425,12 @@ class Model_RGBT_Mask2Former(LightningModule):
 
         # log
         self.log('train/total_loss', loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
+        self.log('train/maskformer_loss', maskformer_loss.detach(), prog_bar=False, on_step=True, on_epoch=True, sync_dist=True)
+        self.log('train/loss_balance', loss_balance_value.detach(), prog_bar=False, on_step=True, on_epoch=True, sync_dist=True)
+        self.log('train/loss_class_probe', loss_class_probe_value.detach(), prog_bar=False, on_step=True, on_epoch=True, sync_dist=True)
         for key, value in losses_dict.items():
+            if key in {"loss_balance", "loss_class_probe"}:
+                continue
             self.log(f"train/{key}", value.detach(), on_step=False, on_epoch=True, sync_dist=True)
 
         return loss

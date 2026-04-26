@@ -855,8 +855,10 @@ class Fusion_Swin_Transformer(nn.Module):
         self.fusion_type = kwargs.get("fusion_type", "peafusion")
         self.router_type = kwargs.get("router_type", "visual")
         self.semoe_channel_wise = kwargs.get("semoe_channel_wise", True)
-        self.class_embed_dim = kwargs.get("class_embed_dim", 256)
+        self.class_embed_dim = kwargs.get("class_embed_dim", 768)
+        self.class_embedding_path = kwargs.get("class_embedding_path", "")
         self.expert_depth = kwargs.get("expert_depth", 1)
+        self.class_independent = kwargs.get("class_independent", False)
         self.num_classes = kwargs.get("num_classes", 0)
         if self.router_type == "class_aware":
             self.semoe_fusion_blocks = nn.ModuleList(
@@ -866,12 +868,17 @@ class Fusion_Swin_Transformer(nn.Module):
                         in_channels=dimension,
                         embed_dim=self.class_embed_dim,
                         channel_wise=self.semoe_channel_wise,
-                        efficient_mode=True,
+                        efficient_mode=not self.class_independent,
                         expert_depth=self.expert_depth,
+                        class_embedding_path=self.class_embedding_path,
+                        stage_name=f"res{stage_index + 2}",
                     )
-                    for dimension in self.num_features
+                    for stage_index, dimension in enumerate(self.num_features)
                 ]
             )
+            self.class_embedding_load_report = [
+                dict(block.class_embedding_load_report) for block in self.semoe_fusion_blocks
+            ]
         else:
             self.semoe_fusion_blocks = nn.ModuleList(
                 [
@@ -884,14 +891,35 @@ class Fusion_Swin_Transformer(nn.Module):
                     for dimension in self.num_features
                 ]
             )
+            self.class_embedding_load_report = [
+                {
+                    "stage": "all",
+                    "status": "not_applicable",
+                    "success": False,
+                    "path": self.class_embedding_path,
+                    "expected_shape": None,
+                }
+            ]
 
         print(
             f"[PEAFusion] fusion_type={self.fusion_type}, "
             f"use_semoe_fusion={self.use_semoe_fusion}, "
             f"router_type={self.router_type}, "
             f"class_embed_dim={self.class_embed_dim}, "
-            f"expert_depth={self.expert_depth}"
+            f"class_embedding_path={self.class_embedding_path or '<random_init>'}, "
+            f"expert_depth={self.expert_depth}, "
+            f"class_independent={self.class_independent}"
         )
+        for report in self.class_embedding_load_report:
+            print(
+                "[PEAFusion][ClassEmbedding] "
+                f"stage={report.get('stage', 'unknown')} "
+                f"status={report.get('status', 'unknown')} "
+                f"path={report.get('path', '') or '<random_init>'} "
+                f"expected_shape={report.get('expected_shape')} "
+                f"loaded_shape={report.get('loaded_shape', None)} "
+                f"verified={report.get('verified', False)}"
+            )
 
         self.init_weights()
         self._freeze_stages()
@@ -976,6 +1004,7 @@ class Fusion_Swin_Transformer(nn.Module):
         out_features = {}
         attention_maps = {}
         self.latest_stage_router_weights = {}
+        self.latest_stage_class_features = {}
 
         x1 = self.channel_projector(x1, 'rgb')
         x2 = self.channel_projector(x2, 'thermal')
@@ -1032,14 +1061,30 @@ class Fusion_Swin_Transformer(nn.Module):
             if isinstance(stage_output, dict):
                 fused_feat = stage_output["fused_feature"]
                 self.latest_stage_router_weights[f"stage_{i_layer + 2}"] = {
-                    "routing_weights": stage_output["routing_weights"].detach().cpu()
+                    "routing_weights": stage_output["routing_weights"]
                 }
             else:
                 fused_feat = stage_output
                 self.latest_stage_router_weights[f"stage_{i_layer + 2}"] = {
-                    key: value.detach().cpu()
+                    key: value
                     for key, value in self.semoe_fusion_blocks[i_layer].latest_router_weights.items()
                 }
+            if fused_feat.dim() == 5:
+                if i_layer == 0:
+                    self.latest_stage_class_features["stage_2"] = fused_feat
+                batch_size, num_classes, channels, height, width = fused_feat.shape
+                if channels != self.num_features[i_layer]:
+                    raise ValueError(
+                        f"Expected class-specific feature channels {self.num_features[i_layer]}, "
+                        f"got {channels}."
+                    )
+                fused_feat = fused_feat.permute(0, 1, 3, 4, 2).contiguous()
+                fused_feat = fused_feat.view(-1, height * width, channels)
+                fused_feat = self.feature_norms[i_layer](fused_feat)
+                fused_feat = fused_feat.view(batch_size, num_classes, height, width, channels)
+                fused_feat = fused_feat.permute(0, 1, 4, 2, 3).contiguous()
+                return fused_feat.view(batch_size, num_classes * channels, height, width)
+
             fused_feat = fused_feat.permute(0, 2, 3, 1).contiguous().view(-1, H * W, self.num_features[i_layer])
             fused_feat = self.feature_norms[i_layer](fused_feat)
             return fused_feat.view(-1, H, W, self.num_features[i_layer]).permute(0, 3, 1, 2).contiguous()
@@ -1086,7 +1131,9 @@ class RGBTSwinTransformer(Fusion_Swin_Transformer, Backbone):
         router_type = cfg.MODEL.FUSION.ROUTER_TYPE
         semoe_channel_wise = cfg.MODEL.FUSION.SEMOE_CHANNEL_WISE
         class_embed_dim = cfg.MODEL.FUSION.CLASS_EMBED_DIM
+        class_embedding_path = cfg.MODEL.FUSION.CLASS_EMBEDDING_PATH
         expert_depth = cfg.MODEL.FUSION.EXPERT_DEPTH
+        class_independent = cfg.MODEL.FUSION.CLASS_INDEPENDENT
         num_classes = cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES
         
 
@@ -1120,7 +1167,9 @@ class RGBTSwinTransformer(Fusion_Swin_Transformer, Backbone):
             router_type=router_type,
             semoe_channel_wise=semoe_channel_wise,
             class_embed_dim=class_embed_dim,
+            class_embedding_path=class_embedding_path,
             expert_depth=expert_depth,
+            class_independent=class_independent,
             num_classes=num_classes,
         )
 
@@ -1132,11 +1181,21 @@ class RGBTSwinTransformer(Fusion_Swin_Transformer, Backbone):
             "res4": 16,
             "res5": 32,
         }
+        output_channel_multiplier = (
+            self.num_classes
+            if (
+                self.use_semoe_fusion
+                and self.fusion_type == "semoe"
+                and self.router_type == "class_aware"
+                and self.class_independent
+            )
+            else 1
+        )
         self._out_feature_channels = {
-            "res2": self.num_features[0],
-            "res3": self.num_features[1],
-            "res4": self.num_features[2],
-            "res5": self.num_features[3],
+            "res2": self.num_features[0] * output_channel_multiplier,
+            "res3": self.num_features[1] * output_channel_multiplier,
+            "res4": self.num_features[2] * output_channel_multiplier,
+            "res5": self.num_features[3] * output_channel_multiplier,
         }
 
         self.model_output_attn = model_output_attn
